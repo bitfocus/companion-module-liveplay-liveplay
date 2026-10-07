@@ -1,96 +1,331 @@
-# companion-module-liveplay
+# LivePlay
 
-Control **LivePlay** audio playout software from a Stream Deck (or any other surface) using [Bitfocus Companion](https://bitfocus.io/companion).
+Control **LivePlay** audio playout from [Bitfocus Companion](https://bitfocus.io/companion) using a Stream Deck, Companion Satellite, web buttons, or any other Companion control surface.
+
+The module provides ready-made buttons for common LivePlay operations including **GO, cue playback, carts, transport control, mixer buses, PFL, master level, preview, and panic**, along with live status, countdowns, cue colors, and progress indicators.
 
 ## Requirements
 
-- **LivePlay server v2.5.0 or later.** Older servers are refused with a clear status message.
-- **Bitfocus Companion v5.0 or later.** The module is built on module API 2.1, which Companion 4.x will not load.
-- Network access from the Companion machine to the LivePlay server (default port `4480`).
+- **LivePlay 2.5.0 or later**
+- **Bitfocus Companion 5.0 or later**
+- Network connectivity from the Companion computer to the LivePlay server
+- LivePlay API port accessible from the Companion computer
+  - Default: `4480`
 
-### Authentication
+## Getting Started
 
-LivePlay 2.5.0 can optionally require a login. If it does, have an administrator issue an **API token** (it starts with `lpk1_`) from LivePlay's Users settings, and paste it into the connection's **API token** field. Use an API token rather than a user account: it does not expire, and revoking it affects only Companion. It is stored in Companion's secrets store, not in the plain config.
+### 1. Add LivePlay to Companion
 
-> If login is **off**, the LivePlay API is open to anyone on the network who can reach the port — only use it on a trusted network.
+In Companion:
 
-## Status
+1. Open **Connections**.
+2. Click **Add connection**.
+3. Search for **LivePlay**.
+4. Add the LivePlay connection.
 
-This module is **not yet part of the official Companion module registry** — it is still being tested in the field. Once it has had more real-world testing it will be submitted through the formal [Bitfocus module PR process](https://github.com/bitfocus/companion-module-requests). Until then, install it manually from a release (below).
+### 2. Configure the Connection
 
-> **Pre-release (< 1.0.0).** The LivePlay external-control API is under active, rapid development. Any build before 1.0.0 may change actions, feedbacks, variables, or required server version in ways that are **not backward compatible** with earlier LivePlay or Companion module versions. Pin a specific release and check its notes before upgrading either side.
+Enter:
 
-## Installation
+- **Host** — IP address or hostname of the computer running LivePlay
+- **Port** — normally `4480`
+- **API token** — required only if authentication is enabled in LivePlay
 
-Each [release](https://github.com/aspinwalld/companion-module-liveplay/releases) includes a ready-to-import module package (`liveplay-x.y.z.tgz`).
+Once connected, Companion will automatically retrieve information about the currently loaded LivePlay project, including cues, carts, buses, colors, playback state, and other available controls.
 
-1. Download the `.tgz` from the latest release.
-2. Open the Companion web UI (default `http://localhost:8000`), go to the **Modules** tab, click **Import custom module**, and select the downloaded `.tgz`.
-3. Add a new connection and search for **LivePlay**.
-4. Enter the IP/hostname of the machine running LivePlay and the port (default `4480`), plus an API token if the server requires a login.
-5. Drag presets from the **Presets** tab onto buttons, or build your own from the actions below.
+## Authentication
 
-## What you get
+LivePlay can optionally require authentication for external control.
 
-### Actions
+If authentication is enabled, create an **API token** in LivePlay's Users settings and enter it in the Companion connection configuration.
 
-| Action                                           | Notes                                                                                                                      |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| GO                                               | Plays the armed Up Next item, or the item derived from the playing item's end behavior — identical to LivePlay's GO button |
-| Play / Stop / Pause / Resume / Toggle pause item | Addressed by item UUID; Stop takes an optional fade (blank uses the cue's own Stop fade)                                   |
-| Play item by index path                          | e.g. `0` or `1,11` (0-based, matches the LivePlay UI)                                                                      |
-| Seek item                                        | Jump to a position in seconds                                                                                              |
-| Stop all                                         | Optional fade in ms; blank uses the project default                                                                        |
-| Panic                                            | Instant stop-all                                                                                                           |
-| Trigger cart slot                                | Slots 1–64                                                                                                                 |
-| Master gain set / adjust                         | Absolute dB, or a ± step applied server-side (race-free)                                                                   |
-| Master limiter                                   | Toggle / on / off                                                                                                          |
-| Arm Up Next                                      | Blank clears the override                                                                                                  |
-| Preview / stop preview                           | Pre-listen without going to air                                                                                            |
-| Load / close project                             | Path is resolved on the server machine                                                                                     |
-| Bus fader set / adjust, bus mute, bus PFL        | Any mixer bus, or "Master" / "Preview", which follow whichever bus holds that role                                         |
-| Clear all PFL · Preview mono audition            | Session-only; not saved in the show                                                                                        |
+LivePlay API tokens begin with:
 
-### Feedbacks
-
-Connection OK · project loaded · item playing · item paused · anything playing · cart slot active · limiter enabled · limiter engaged (actively reducing) · preview active · bus muted · bus PFL · Preview mono. Plus color mirrors that paint a button in an item's own LivePlay color.
-
-### Variables
-
-`project_name`, `current_item`, `elapsed`, `remaining`, `duration`, `next_name`, `master_gain`, `limiter`, `lufs_m`, `lufs_s`, `playing_count`, `item_count`, `server_version` and more — see the connection's Variables tab.
-
-New in 0.4.0:
-
-- `<x>_progress` — how far through the cue is, as a whole number from `0` (start) to `255` (end). Built to drive a Companion 5 gauge. `<x>` is `cart_<n>`, `current`, `next` or `selected`.
-- `<x>_color_rgb` — the item color as a packed RGB **number**, and `<x>_text_rgb` — black or white, whichever reads over it. Gauge colors need numbers: the existing `*_color` variables are `#RRGGBB` text, which Companion 5.0.0 draws as black on a gauge. `current_flash_rgb` / `current_flash_text_rgb` add the end-of-cue warning flash.
-- For any other cue, the **Cue progress / color / text color / name** value feedbacks give the same values for a UUID or index path, through button local variables.
-- `bus_<id>_name`, `bus_<id>_gain`, `bus_<id>_mute`, `bus_<id>_pfl` for every bus in the open show.
-- `preview_mono`, and `advance_in` — seconds until a cue that is waiting before the next one fires (blank when nothing is waiting).
-
-Every item in the open project also gets a pair of **name variables** so buttons can show an item's name addressed either way: `$(liveplay:item_name_<uuid>)` (stable across playlist edits) and `$(liveplay:item_name_at_<index>)` (e.g. `item_name_at_0`, or `item_name_at_1_11` for index path `1,11`). These update automatically when the playlist changes.
-
-### Presets
-
-Ready-made buttons for GO (shows the Up Next name), a now-playing display with countdown, one Trigger Cue button per cue in the open show, stop all, panic, cart slots 1–16, bus mute and PFL for every bus, master gain ±1 dB, a limiter toggle that turns red while limiting, and a connection status tile.
-
-Every preset that fires or shows a cue — **cart slots, GO, Now playing, Play selected and every Trigger Cue button** — uses Companion 5's layered buttons with the same progress bar: the whole button is a horizontal gauge in the cue's own color. While the cue waits, the button shows that color dimmed; as it plays, a full-color bar sweeps left to right under the name. GO follows the Up Next item; Now playing also carries the end-of-cue warning flash. To build the same thing by hand, add a gauge element with value `$(liveplay:cart_<n>_progress)`, range `0`–`255`, one color stop set to `$(liveplay:cart_<n>_color_rgb)` (as an expression), and a dimmed track at 60.
-
-## Tips
-
-- **Prefer UUIDs for fixed buttons.** Item UUIDs stay stable when the playlist is edited; index paths shift.
-- Playing an item may stop others — LivePlay's default ducking mode is _stop-all_. That's LivePlay behavior, not a module bug.
-- Right after a project loads, cues may still be loading audio; plays during that window fail with _item not loaded into engine_ (logged as a warning in Companion).
-
-## Development
-
-```bash
-corepack enable
-yarn install
-yarn build        # compile to dist/
-yarn dev          # watch mode
-yarn lint         # eslint
-yarn package      # build a distributable .tgz via companion-module-build
+```text
+lpk1_
 ```
+
+API tokens are recommended instead of using an individual operator account. A token can be revoked independently without changing a user's login credentials.
+
+Companion stores the token using its secrets system rather than in the normal connection configuration.
+
+> If authentication is disabled, any device that can reach LivePlay's API port may be able to control the system. Only operate LivePlay without authentication on a trusted network.
+
+## Presets
+
+The easiest way to build a LivePlay control surface is from the module's **Presets**.
+
+Available presets include:
+
+- **GO**
+- **Now Playing**
+- **Play Selected Cue**
+- Individual **Trigger Cue** buttons for cues in the open project
+- **Stop All**
+- **Panic**
+- **Cart Slots 1–16**
+- Mixer bus **Mute**
+- Mixer bus **PFL**
+- **Master Gain +1 dB / -1 dB**
+- **Limiter Toggle**
+- **Connection Status**
+
+Cue-related presets automatically follow LivePlay's cue names, colors, playback state, and progress.
+
+### Cue Progress
+
+Cue buttons use Companion 5 layered-button features to provide a visual progress indication.
+
+While a cue is waiting, its button displays the cue's LivePlay color in a dimmed state. During playback, the button fills from left to right in the cue's full color.
+
+This behavior is included on presets such as:
+
+- GO
+- Now Playing
+- Trigger Cue
+- Play Selected
+- Cart Slots
+
+The **Now Playing** preset also reflects LivePlay's end-of-cue warning state.
+
+## Actions
+
+The module exposes LivePlay controls for building custom buttons in addition to the supplied presets.
+
+| Action                      | Description                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| **GO**                      | Plays the currently armed Up Next item, using the same behavior as LivePlay's GO button |
+| **Play Item**               | Plays a specific cue                                                                    |
+| **Stop Item**               | Stops a specific cue, optionally with a fade                                            |
+| **Pause Item**              | Pauses a playing cue                                                                    |
+| **Resume Item**             | Resumes a paused cue                                                                    |
+| **Toggle Pause**            | Toggles a cue between playing and paused                                                |
+| **Play Item by Index Path** | Plays a cue using its playlist position, such as `0` or `1,11`                          |
+| **Seek Item**               | Moves playback to a specified position                                                  |
+| **Stop All**                | Stops all playing cues, optionally using a specified fade                               |
+| **Panic**                   | Immediately stops all playback                                                          |
+| **Trigger Cart Slot**       | Triggers cart slots 1–64                                                                |
+| **Arm Up Next**             | Overrides the cue armed for the next GO                                                 |
+| **Preview Item**            | Plays a cue through LivePlay's preview path                                             |
+| **Stop Preview**            | Stops preview playback                                                                  |
+| **Load Project**            | Loads a LivePlay project on the LivePlay server                                         |
+| **Close Project**           | Closes the currently loaded project                                                     |
+| **Master Gain**             | Sets or adjusts the master output level                                                 |
+| **Master Limiter**          | Turns the limiter on, off, or toggles its state                                         |
+| **Bus Fader**               | Sets or adjusts a mixer bus level                                                       |
+| **Bus Mute**                | Controls mixer bus mute                                                                 |
+| **Bus PFL**                 | Controls mixer bus PFL                                                                  |
+| **Clear All PFL**           | Clears active PFL selections                                                            |
+| **Preview Mono**            | Controls mono audition for the preview bus                                              |
+
+## Feedbacks
+
+Feedbacks can be used to change button appearance based on LivePlay's current state.
+
+Available feedbacks include:
+
+- Connection status
+- Project loaded
+- Item playing
+- Item paused
+- Anything playing
+- Cart slot active
+- Limiter enabled
+- Limiter actively reducing gain
+- Preview active
+- Bus muted
+- Bus PFL active
+- Preview mono enabled
+- Cue color
+- Cue progress
+- Cue text color
+
+Cue color feedbacks can be used to make Companion buttons automatically match the colors assigned in LivePlay.
+
+## Variables
+
+The module publishes LivePlay information as Companion variables for use in button text, triggers, expressions, and custom layouts.
+
+Common variables include:
+
+| Variable         | Description                                     |
+| ---------------- | ----------------------------------------------- |
+| `project_name`   | Currently loaded project                        |
+| `current_item`   | Current playing cue                             |
+| `elapsed`        | Elapsed playback time                           |
+| `remaining`      | Remaining playback time                         |
+| `duration`       | Cue duration                                    |
+| `next_name`      | Up Next cue                                     |
+| `master_gain`    | Current master level                            |
+| `limiter`        | Limiter state                                   |
+| `lufs_m`         | Momentary loudness                              |
+| `lufs_s`         | Short-term loudness                             |
+| `playing_count`  | Number of currently playing cues                |
+| `item_count`     | Number of cues in the project                   |
+| `server_version` | Connected LivePlay version                      |
+| `advance_in`     | Time until an automatically advancing cue fires |
+
+Additional variables are generated dynamically for cues, cart slots, and mixer buses.
+
+The complete list for the current connection is available in Companion's **Variables** tab.
+
+### Cue Variables
+
+LivePlay exposes cue state for commonly used targets including:
+
+- Current cue
+- Up Next cue
+- Selected cue
+- Cart slots
+
+For example:
+
+```text
+$(liveplay:current_progress)
+$(liveplay:current_color_rgb)
+$(liveplay:current_text_rgb)
+```
+
+Progress values range from:
+
+```text
+0
+```
+
+at the beginning of a cue to:
+
+```text
+255
+```
+
+at the end.
+
+These values can be used directly with Companion 5 gauges and layered buttons.
+
+### Cue Name Variables
+
+Each cue in the open project receives variables that can be addressed by either its UUID or playlist position.
+
+UUID-based:
+
+```text
+$(liveplay:item_name_<uuid>)
+```
+
+Index-based:
+
+```text
+$(liveplay:item_name_at_<index>)
+```
+
+Examples:
+
+```text
+$(liveplay:item_name_at_0)
+$(liveplay:item_name_at_1_11)
+```
+
+UUID-based addressing is generally preferred for permanent control surfaces because the UUID remains associated with the cue when the playlist is rearranged.
+
+### Mixer Bus Variables
+
+Each mixer bus exposes variables including:
+
+```text
+bus_<id>_name
+bus_<id>_gain
+bus_<id>_mute
+bus_<id>_pfl
+```
+
+## Building Custom Cue Buttons
+
+For most operators, starting with the supplied **Trigger Cue** preset is recommended.
+
+When building a button manually, a cue can be addressed by either:
+
+- **UUID**
+- **Index path**
+
+### UUID
+
+UUIDs remain associated with a cue when the playlist is rearranged.
+
+Use UUID addressing for fixed buttons that should always trigger the same cue.
+
+### Index Path
+
+Index paths represent the cue's current position in the playlist.
+
+Examples:
+
+```text
+0
+1,11
+```
+
+Index paths are useful when a button should follow a position in the playlist rather than a specific cue.
+
+## Operator Notes
+
+### A cue may stop another playing cue
+
+LivePlay determines how simultaneous playback is handled.
+
+For example, if the project's playback behavior is configured to stop existing playback when another cue is fired, triggering a cue from Companion will produce the same result as triggering it directly in LivePlay.
+
+### Cues may not be immediately available after loading a project
+
+When a project is first opened, LivePlay may still be loading audio into the playback engine.
+
+If a cue is triggered before it has finished loading, LivePlay may reject the command with:
+
+```text
+item not loaded into engine
+```
+
+Companion records this as a warning.
+
+### Prefer UUIDs for permanent buttons
+
+For control surfaces designed around specific cues, use cue UUIDs whenever possible.
+
+Playlist index paths can change when cues are inserted, removed, or rearranged.
+
+## Troubleshooting
+
+### Companion will not connect
+
+Check:
+
+- LivePlay is running.
+- The correct LivePlay IP address or hostname is configured.
+- The API port is correct.
+- The Companion computer can reach the LivePlay computer over the network.
+- A firewall is not blocking the LivePlay API port.
+- The API token is correct if authentication is enabled.
+
+The default API port is:
+
+```text
+4480
+```
+
+### Companion reports an unsupported server version
+
+LivePlay **2.5.0 or later** is required.
+
+Older versions are intentionally rejected by the module.
+
+### Buttons do not update after opening a project
+
+Allow LivePlay a moment to finish loading the project. Cue, cart, bus, variable, and preset information is populated from the currently open LivePlay project.
+
+### A button triggers the wrong cue after the playlist was edited
+
+If the button uses an **index path**, its target may have moved.
+
+For permanent cue buttons, change the action to use the cue's **UUID** instead.
 
 ## License
 

@@ -1,0 +1,42 @@
+name: Release
+
+# Builds the module package and attaches the .tgz to the GitHub Release
+# whenever a version tag (v1.2.3) is pushed.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish module package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+      - name: Prepare Environment
+        run: |
+          corepack enable
+      - name: Install dependencies
+        run: |
+          yarn install
+        env:
+          CI: true
+      - name: Build module package
+        run: |
+          yarn package
+        env:
+          CI: true
+      - name: Create release with package attached
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.tgz'
+          generate_release_notes: true

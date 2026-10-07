@@ -1,18 +1,18 @@
 {
 	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
 	"type": "connection",
-	"id": "your-module-name",
-	"name": "your-module-name",
-	"shortname": "module-shortname",
-	"description": "A short one line description of your module",
+	"id": "liveplay",
+	"name": "liveplay",
+	"shortname": "liveplay",
+	"description": "Control the LivePlay audio playout software from Bitfocus Companion",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/bitfocus/companion-module-your-module-name.git",
-	"bugs": "https://github.com/bitfocus/companion-module-your-module-name/issues",
+	"repository": "git+https://github.com/aspinwalld/companion-module-liveplay.git",
+	"bugs": "https://github.com/aspinwalld/companion-module-liveplay/issues",
 	"maintainers": [
 		{
-			"name": "Your name",
-			"email": "Your email"
+			"name": "DI Aspinwall",
+			"email": "di@cflsound.com"
 		}
 	],
 	"runtime": {
@@ -22,7 +22,7 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "Your company",
-	"products": ["Your product"],
-	"keywords": []
+	"manufacturer": "LivePlay",
+	"products": ["LivePlay"],
+	"keywords": ["audio", "playout", "playback", "soundboard", "cart wall", "theatre", "broadcast"]
 }

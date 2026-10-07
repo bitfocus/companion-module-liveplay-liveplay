@@ -1,8 +1,22 @@
+# Dependencies
 node_modules/
 package-lock.json
+/.yarn
+!/.yarn/patches
+!/.yarn/releases
+!/.yarn/plugins
+
+# Build output
+/dist
 /pkg
 /*.tgz
-/dist
-DEBUG-*
-/.yarn
+
+# Editors / OS
 /.vscode
+/.idea
+.DS_Store
+Thumbs.db
+
+# Logs / debug
+*.log
+DEBUG-*

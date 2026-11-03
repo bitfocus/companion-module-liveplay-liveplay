@@ -30,6 +30,7 @@ Enter:
 - **Host** — IP address or hostname of the computer running LivePlay
 - **Port** — normally `4480`
 - **API token** — required only if authentication is enabled in LivePlay
+- **Per-cue name variables** — optional, off by default (see [Cue Name Variables](#cue-name-variables))
 
 Once connected, Companion will automatically retrieve information about the currently loaded LivePlay project, including cues, carts, buses, colors, playback state, and other available controls.
 
@@ -136,11 +137,10 @@ Available feedbacks include:
 - Bus muted
 - Bus PFL active
 - Preview mono enabled
-- Cue color
-- Cue progress
-- Cue text color
+- Cue / cart slot progress, color, text color and name (values)
+- Cue state (values)
 
-Cue color feedbacks can be used to make Companion buttons automatically match the colors assigned in LivePlay.
+The value feedbacks feed button local variables, so Companion 5 layered buttons and gauges can automatically match the colors assigned in LivePlay.
 
 ## Variables
 
@@ -204,7 +204,7 @@ These values can be used directly with Companion 5 gauges and layered buttons.
 
 ### Cue Name Variables
 
-Each cue in the open project receives variables that can be addressed by either its UUID or playlist position.
+With **Per-cue name variables** enabled in the connection configuration, each cue in the open project receives variables that can be addressed by either its UUID or playlist position. The option is off by default, because a large show produces hundreds of variables; the Trigger Cue presets and the **Cue name** value feedback work without it.
 
 UUID-based:
 

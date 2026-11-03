@@ -49,6 +49,11 @@ const UUID_TOOLTIP =
 const BUS_GAIN_MIN = -120
 const BUS_GAIN_MAX = 12
 
+/**
+ * Fixed-choice selectors like this one set `disableAutoExpression`: an
+ * expression that computes anything but one of the ids (`On`, `1`) fails
+ * validation and Companion silently skips the action.
+ */
 const MODE_CHOICES: DropdownChoice<'toggle' | 'on' | 'off'>[] = [
 	{ id: 'toggle', label: 'Toggle' },
 	{ id: 'on', label: 'On' },
@@ -111,8 +116,8 @@ export function UpdateActions(self: ModuleInstance): void {
 			description:
 				'Plays the armed Up Next item, or the target derived from the playing item’s end behavior — same as the GO button in LivePlay.',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/transport/go')
+			callback: async (_event, context) => {
+				await self.apiPost('/api/transport/go', {}, context.signal)
 			},
 		},
 		play_index: {
@@ -127,14 +132,14 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const raw = event.options.index
 				const index = parseIndexPath(raw)
 				if (!index) {
 					self.log('error', `Invalid index path: "${raw}"`)
 					return
 				}
-				await self.apiPost('/api/transport/play_index', { index })
+				await self.apiPost('/api/transport/play_index', { index }, context.signal)
 			},
 		},
 		play_item: {
@@ -142,9 +147,9 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [
 				{ id: 'uuid', type: 'textinput', label: 'Item UUID', tooltip: UUID_TOOLTIP, default: '', useVariables: true },
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
-				if (uuid) await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/play`)
+				if (uuid) await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/play`, {}, context.signal)
 			},
 		},
 		stop_item: {
@@ -161,7 +166,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
 				if (!uuid) return
 				const fadeMs = parseFade(event.options.fade)
@@ -172,6 +177,7 @@ export function UpdateActions(self: ModuleInstance): void {
 				await self.apiPost(
 					`/api/project/items/${encodeURIComponent(uuid)}/stop`,
 					fadeMs === null ? {} : { fade_ms: fadeMs },
+					context.signal,
 				)
 			},
 		},
@@ -180,9 +186,9 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [
 				{ id: 'uuid', type: 'textinput', label: 'Item UUID', tooltip: UUID_TOOLTIP, default: '', useVariables: true },
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
-				if (uuid) await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/pause`)
+				if (uuid) await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/pause`, {}, context.signal)
 			},
 		},
 		resume_item: {
@@ -190,9 +196,9 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [
 				{ id: 'uuid', type: 'textinput', label: 'Item UUID', tooltip: UUID_TOOLTIP, default: '', useVariables: true },
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
-				if (uuid) await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/resume`)
+				if (uuid) await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/resume`, {}, context.signal)
 			},
 		},
 		toggle_pause_item: {
@@ -202,13 +208,13 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [
 				{ id: 'uuid', type: 'textinput', label: 'Item UUID', tooltip: UUID_TOOLTIP, default: '', useVariables: true },
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
 				if (!uuid) return
 				if (self.state.isPaused(uuid)) {
-					await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/resume`)
+					await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/resume`, {}, context.signal)
 				} else if (self.state.isOnAir(uuid)) {
-					await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/pause`)
+					await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/pause`, {}, context.signal)
 				} else {
 					self.log('info', `Toggle pause: item ${uuid} is not on air`)
 				}
@@ -220,10 +226,14 @@ export function UpdateActions(self: ModuleInstance): void {
 				{ id: 'uuid', type: 'textinput', label: 'Item UUID', tooltip: UUID_TOOLTIP, default: '', useVariables: true },
 				{ id: 'seconds', type: 'number', label: 'Position (seconds)', default: 0, min: 0, max: 86400, step: 0.1 },
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
 				if (uuid)
-					await self.apiPost(`/api/project/items/${encodeURIComponent(uuid)}/seek`, { seconds: event.options.seconds })
+					await self.apiPost(
+						`/api/project/items/${encodeURIComponent(uuid)}/seek`,
+						{ seconds: event.options.seconds },
+						context.signal,
+					)
 			},
 		},
 		stop_all: {
@@ -238,20 +248,20 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const fadeMs = parseFade(event.options.fade)
 				if (fadeMs === undefined) {
 					self.log('error', `Invalid Stop All fade: "${event.options.fade}"`)
 					return
 				}
-				await self.apiPost('/api/transport/stop_all', fadeMs === null ? {} : { fade_ms: fadeMs })
+				await self.apiPost('/api/transport/stop_all', fadeMs === null ? {} : { fade_ms: fadeMs }, context.signal)
 			},
 		},
 		panic: {
 			name: 'Panic (stop all, instant)',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/transport/stop_all', { fade_ms: 0 })
+			callback: async (_event, context) => {
+				await self.apiPost('/api/transport/stop_all', { fade_ms: 0 }, context.signal)
 			},
 		},
 		cart_play: {
@@ -267,23 +277,23 @@ export function UpdateActions(self: ModuleInstance): void {
 					max: 64,
 				},
 			],
-			callback: async (event) => {
-				await self.apiPost(`/api/transport/cart/${event.options.slot - 1}/play`)
+			callback: async (event, context) => {
+				await self.apiPost(`/api/transport/cart/${event.options.slot - 1}/play`, {}, context.signal)
 			},
 		},
 		master_gain_set: {
 			name: 'Master gain: set',
 			options: [{ id: 'db', type: 'number', label: 'Gain (dB)', default: 0, min: -60, max: 12, step: 0.5 }],
-			callback: async (event) => {
-				await self.apiPost('/api/master/gain', { db: event.options.db })
+			callback: async (event, context) => {
+				await self.apiPost('/api/master/gain', { db: event.options.db }, context.signal)
 			},
 		},
 		master_gain_step: {
 			name: 'Master gain: adjust',
 			description: 'Adds the delta to the current master gain (applied server-side, race-free).',
 			options: [{ id: 'delta', type: 'number', label: 'Delta (dB)', default: 1, min: -24, max: 24, step: 0.5 }],
-			callback: async (event) => {
-				await self.apiPost('/api/master/gain', { delta: event.options.delta })
+			callback: async (event, context) => {
+				await self.apiPost('/api/master/gain', { delta: event.options.delta }, context.signal)
 			},
 		},
 		limiter: {
@@ -294,6 +304,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					type: 'dropdown',
 					label: 'Mode',
 					default: 'toggle',
+					disableAutoExpression: true,
 					choices: [
 						{ id: 'toggle', label: 'Toggle' },
 						{ id: 'on', label: 'On' },
@@ -301,9 +312,9 @@ export function UpdateActions(self: ModuleInstance): void {
 					],
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const body = event.options.mode === 'toggle' ? {} : { enabled: event.options.mode === 'on' }
-				await self.apiPost('/api/master/limiter', body)
+				await self.apiPost('/api/master/limiter', body, context.signal)
 			},
 		},
 		arm_next: {
@@ -329,16 +340,16 @@ export function UpdateActions(self: ModuleInstance): void {
 			options: [
 				{ id: 'uuid', type: 'textinput', label: 'Item UUID', tooltip: UUID_TOOLTIP, default: '', useVariables: true },
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const uuid = event.options.uuid.trim()
-				if (uuid) await self.apiPost('/api/preview', { itemUuid: uuid })
+				if (uuid) await self.apiPost('/api/preview', { itemUuid: uuid }, context.signal)
 			},
 		},
 		preview_stop: {
 			name: 'Stop preview',
 			options: [],
-			callback: async () => {
-				await self.apiRequest('DELETE', '/api/preview')
+			callback: async (_event, context) => {
+				await self.apiRequest('DELETE', '/api/preview', undefined, context.signal)
 			},
 		},
 		load_project: {
@@ -353,16 +364,16 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const path = event.options.path.trim()
-				if (path) await self.apiPost('/api/project/load', { path })
+				if (path) await self.apiPost('/api/project/load', { path }, context.signal)
 			},
 		},
 		close_project: {
 			name: 'Close project',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/project/close')
+			callback: async (_event, context) => {
+				await self.apiPost('/api/project/close', {}, context.signal)
 			},
 		},
 		pause_toggle: {
@@ -370,8 +381,8 @@ export function UpdateActions(self: ModuleInstance): void {
 			description:
 				'Resumes everything paused, or pauses everything sounding — the same single-key behavior as LivePlay’s Pause/Resume shortcut.',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/transport/pause_toggle')
+			callback: async (_event, context) => {
+				await self.apiPost('/api/transport/pause_toggle', {}, context.signal)
 			},
 		},
 
@@ -389,14 +400,15 @@ export function UpdateActions(self: ModuleInstance): void {
 					type: 'dropdown',
 					label: 'Direction',
 					default: 1,
+					disableAutoExpression: true,
 					choices: [
 						{ id: 1, label: 'Next (down)' },
 						{ id: -1, label: 'Previous (up)' },
 					],
 				},
 			],
-			callback: async (event) => {
-				await self.apiPost('/api/selection', { delta: event.options.delta })
+			callback: async (event, context) => {
+				await self.apiPost('/api/selection', { delta: event.options.delta }, context.signal)
 			},
 		},
 		select_item: {
@@ -411,8 +423,8 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event) => {
-				await self.apiPost('/api/selection', { itemUuid: event.options.uuid.trim() })
+			callback: async (event, context) => {
+				await self.apiPost('/api/selection', { itemUuid: event.options.uuid.trim() }, context.signal)
 			},
 		},
 		select_index: {
@@ -427,7 +439,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					useVariables: true,
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const raw = event.options.index
 				const index = parseIndexPath(raw)
 				if (!index) {
@@ -439,36 +451,36 @@ export function UpdateActions(self: ModuleInstance): void {
 					self.log('warn', `No item at index path "${raw}"`)
 					return
 				}
-				await self.apiPost('/api/selection', { itemUuid: uuid })
+				await self.apiPost('/api/selection', { itemUuid: uuid }, context.signal)
 			},
 		},
 		arm_selected: {
 			name: 'Arm selected as Up Next',
 			description: 'Arms whatever is selected in LivePlay as the Up Next target for GO.',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/transport/arm_selected')
+			callback: async (_event, context) => {
+				await self.apiPost('/api/transport/arm_selected', {}, context.signal)
 			},
 		},
 		play_selected: {
 			name: 'Play selected item',
 			description: 'Triggers the selected item immediately — LivePlay’s "Play Selected" shortcut.',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/transport/play_selected')
+			callback: async (_event, context) => {
+				await self.apiPost('/api/transport/play_selected', {}, context.signal)
 			},
 		},
 		preview_selected: {
 			name: 'Preview selected item',
 			description: 'Pre-listens the selected item on the preview device without going to air.',
 			options: [],
-			callback: async () => {
+			callback: async (_event, context) => {
 				const uuid = self.state.selection?.itemUuid
 				if (!uuid) {
 					self.log('info', 'Preview selected: nothing is selected')
 					return
 				}
-				await self.apiPost('/api/preview', { itemUuid: uuid })
+				await self.apiPost('/api/preview', { itemUuid: uuid }, context.signal)
 			},
 		},
 		show_mode: {
@@ -481,6 +493,7 @@ export function UpdateActions(self: ModuleInstance): void {
 					type: 'dropdown',
 					label: 'Mode',
 					default: 'toggle',
+					disableAutoExpression: true,
 					choices: [
 						{ id: 'toggle', label: 'Toggle' },
 						{ id: 'on', label: 'On (playback view)' },
@@ -488,9 +501,9 @@ export function UpdateActions(self: ModuleInstance): void {
 					],
 				},
 			],
-			callback: async (event) => {
+			callback: async (event, context) => {
 				const body = event.options.mode === 'toggle' ? {} : { enabled: event.options.mode === 'on' }
-				await self.apiPost('/api/ui/showmode', body)
+				await self.apiPost('/api/ui/showmode', body, context.signal)
 			},
 		},
 
@@ -531,7 +544,14 @@ export function UpdateActions(self: ModuleInstance): void {
 			name: 'Bus mute',
 			options: [
 				busOption(self),
-				{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: MODE_CHOICES },
+				{
+					id: 'mode',
+					type: 'dropdown',
+					label: 'Mode',
+					default: 'toggle',
+					choices: MODE_CHOICES,
+					disableAutoExpression: true,
+				},
 			],
 			callback: async (event) => {
 				const bus = busFor(self, event.options.bus)
@@ -547,7 +567,14 @@ export function UpdateActions(self: ModuleInstance): void {
 			description: 'Listens to a bus through the Preview bus. Session-only: not saved in the show.',
 			options: [
 				busOption(self),
-				{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: MODE_CHOICES },
+				{
+					id: 'mode',
+					type: 'dropdown',
+					label: 'Mode',
+					default: 'toggle',
+					choices: MODE_CHOICES,
+					disableAutoExpression: true,
+				},
 			],
 			callback: async (event) => {
 				const bus = busFor(self, event.options.bus)
@@ -564,17 +591,26 @@ export function UpdateActions(self: ModuleInstance): void {
 		bus_pfl_clear: {
 			name: 'Clear all PFL',
 			options: [],
-			callback: async () => {
-				await self.apiPost('/api/buses/pfl/clear')
+			callback: async (_event, context) => {
+				await self.apiPost('/api/buses/pfl/clear', {}, context.signal)
 			},
 		},
 		preview_mono: {
 			name: 'Preview mono audition',
 			description: 'Sums the Preview bus to mono, to check a cue for phase problems. Session-only.',
-			options: [{ id: 'mode', type: 'dropdown', label: 'Mode', default: 'toggle', choices: MODE_CHOICES }],
-			callback: async (event) => {
+			options: [
+				{
+					id: 'mode',
+					type: 'dropdown',
+					label: 'Mode',
+					default: 'toggle',
+					choices: MODE_CHOICES,
+					disableAutoExpression: true,
+				},
+			],
+			callback: async (event, context) => {
 				const mono = event.options.mode === 'toggle' ? !self.state.previewMono : event.options.mode === 'on'
-				await self.apiPost('/api/preview/mono', { mono })
+				await self.apiPost('/api/preview/mono', { mono }, context.signal)
 			},
 		},
 	})

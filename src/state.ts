@@ -322,6 +322,7 @@ export class LivePlayState {
 
 	clearPlayback(): void {
 		this.playing.clear()
+		this.cueToItem.clear()
 		this.advance = null
 		this.lufsM = null
 		this.lufsS = null

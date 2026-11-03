@@ -5,17 +5,19 @@ import {
 	type CompanionPresetGroup,
 	type CompanionPresetSection,
 } from '@companion-module/base'
-import { itemNameByIndexVariable, itemNameByUuidVariable } from './variables.js'
-import { CUE_LOCAL_SOURCES, cueGaugeLocals, gaugePreset, localVar, moduleVar } from './presets-gauge.js'
+import { itemNameByIndexVariable } from './variables.js'
+import { CUE_LOCAL_SOURCES, cueGaugeLocals, gaugePreset, localVar } from './presets-gauge.js'
 
 /**
  * "Trigger Cue" presets: one button per playable item in the open project,
  * grouped by the top-level LivePlay group it lives in.
  *
- * The item's UUID is baked into the action and feedbacks, so a placed button
- * keeps firing the same cue when the playlist is reordered. The text points
- * at the item's name variable rather than baking the name in, so renaming a
- * cue in LivePlay relabels buttons already on a page too.
+ * Each group is a template over the by-UUID button rather than a preset per
+ * cue, so a 400-cue show publishes one preset and a list of UUIDs. A placed
+ * button holds its cue's UUID in its `uuid` local variable, so it keeps
+ * firing the same cue when the playlist is reordered, and reads the name
+ * through the cue_name feedback, so renaming a cue in LivePlay relabels
+ * buttons already on a page too.
  *
  * Generated from the catalog; main.ts re-publishes presets whenever the
  * catalog changes, so this list tracks the project as it is edited.
@@ -67,7 +69,7 @@ export function CuePresets(self: ModuleInstance): {
 
 	// Bucket every playable item under the top-level entry it descends from:
 	// `2,35` lands under group 2, a bare `4` under the top level.
-	const buckets = new Map<string, { name: string; presets: string[] }>()
+	const buckets = new Map<string, { name: string; cues: { name: string; value: string }[] }>()
 	for (const item of self.state.catalog.values()) {
 		// Groups aren't cues, and cart-only items (-1 paths) have no playlist
 		// position — the cart presets cover those.
@@ -82,23 +84,12 @@ export function CuePresets(self: ModuleInstance): {
 			const groupName = groupUuid ? self.state.itemName(groupUuid) : ''
 			bucket = {
 				name: top === null ? 'Cues: Top level' : `Cues: Group ${top}${groupName ? ` – ${groupName}` : ''}`,
-				presets: [],
+				cues: [],
 			}
 			buckets.set(bucketId, bucket)
 		}
 
-		const id = `cue_${item.uuid}`
-		bucket.presets.push(id)
-		// The UUID is baked in, so the button keeps firing (and showing) the
-		// same cue when the playlist is reordered; the label follows renames.
-		presets[id] = gaugePreset({
-			name: `${path}  ${item.name}`,
-			keywords: [path, item.name],
-			label: moduleVar(itemNameByUuidVariable(item.uuid)),
-			sources: CUE_LOCAL_SOURCES,
-			localVariables: cueGaugeLocals(item.uuid),
-			steps: [{ down: [{ actionId: 'play_item', options: { uuid: item.uuid } }], up: [] }],
-		})
+		bucket.cues.push({ name: `${path}  ${item.name}`, value: item.uuid })
 	}
 
 	const definitions: CompanionPresetGroup[] = [
@@ -112,7 +103,14 @@ export function CuePresets(self: ModuleInstance): {
 		},
 	]
 	for (const [id, bucket] of buckets) {
-		definitions.push({ id, name: bucket.name, type: 'simple', presets: bucket.presets })
+		definitions.push({
+			id,
+			name: bucket.name,
+			type: 'template',
+			presetId: 'cue_by_uuid',
+			templateVariableName: 'uuid',
+			templateValues: bucket.cues,
+		})
 	}
 
 	return {

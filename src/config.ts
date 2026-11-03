@@ -3,6 +3,8 @@ import type { SomeCompanionConfigField } from '@companion-module/base'
 export type ModuleConfig = {
 	host: string
 	port: number
+	/** Publish item_name_<uuid> / item_name_at_<index> for every cue (opt-in: a big show makes hundreds). */
+	itemVariables: boolean
 }
 
 /**
@@ -22,7 +24,7 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			width: 12,
 			value:
 				'Controls a LivePlay server (v2.5.0 or later) over its REST + WebSocket API. ' +
-				'If the server requires a login, have an administrator issue an API token from LivePlay’s Users settings and paste it below.' +
+				'If the server requires a login, have an administrator issue an API token from LivePlay’s Users settings and paste it below. ' +
 				'Without a login the LivePlay API is open to anyone on the network — only use it on a trusted network.',
 		},
 		{
@@ -50,6 +52,16 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 				'Use an API token rather than a user account: it does not expire, and revoking it only affects Companion.',
 			width: 12,
 			default: '',
+		},
+		{
+			type: 'checkbox',
+			id: 'itemVariables',
+			label: 'Per-cue name variables',
+			tooltip:
+				'Adds item_name_<uuid> and item_name_at_<index> variables for every cue in the open project — two per cue, so hundreds on a large show. ' +
+				'The Trigger Cue presets and the Cue value feedbacks do not need them.',
+			width: 12,
+			default: false,
 		},
 	]
 }

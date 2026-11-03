@@ -16,7 +16,7 @@
 		}
 	],
 	"runtime": {
-		"type": "node22",
+		"type": "node26",
 		"api": "nodejs-ipc",
 		"apiVersion": "0.0.0",
 		"entrypoint": "../dist/main.js"
@@ -24,5 +24,5 @@
 	"legacyIds": ["liveplay"],
 	"manufacturer": "LivePlay",
 	"products": ["LivePlay"],
-	"keywords": ["audio", "playout", "playback", "soundboard", "cart wall", "theatre", "broadcast"]
+	"keywords": ["audio", "playout", "playback", "soundboard", "cart wall", "theater", "theatre", "broadcast"]
 }

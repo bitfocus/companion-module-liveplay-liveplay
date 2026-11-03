@@ -4,7 +4,7 @@ import { GetConfigFields, type ModuleConfig, type ModuleSecrets } from './config
 import { UpdateVariableDefinitions, CollectVariableValues, type VariablesSchema } from './variables.js'
 import { UpgradeScripts } from './upgrades.js'
 import { UpdateActions, type ActionsSchema } from './actions.js'
-import { CUE_GAUGE_FEEDBACKS, UpdateFeedbacks, type FeedbacksSchema } from './feedbacks.js'
+import { CART_GAUGE_FEEDBACKS, CUE_GAUGE_FEEDBACKS, UpdateFeedbacks, type FeedbacksSchema } from './feedbacks.js'
 import { UpdatePresets } from './presets.js'
 import { LivePlayState } from './state.js'
 import {
@@ -58,22 +58,21 @@ const METER_HZ = 10
 const SUMMARY_DEBOUNCE_MS = 250
 /** WebSocket close code LivePlay uses when a credential expires or is revoked mid-session. */
 const WS_CLOSE_POLICY = 1008
-/** Every color feedback that has to be re-evaluated when an item's color or identity changes. */
-const COLOR_FEEDBACKS = [
-	'next_color',
-	'selected_color',
-	'playing_color',
-	'cart_color',
-	'item_color',
-	'cue_button',
-] as const
 /** Every feedback that reads bus state. */
 const BUS_FEEDBACKS = ['bus_muted', 'bus_pfl'] as const
+
+/** Retry interval after the project document could not be fetched (timeout, network or server error). */
+const CATALOG_RETRY_MS = 5000
 
 /** Result of a quiet GET: the HTTP status (0 when unreachable) and parsed body. */
 interface ProbeResult {
 	status: number
 	body: unknown
+}
+
+/** Tidy config as it arrives: a pasted host often carries a stray space, which makes every URL invalid. */
+function normalizeConfig(config: ModuleConfig): ModuleConfig {
+	return { ...config, host: config.host.trim() }
 }
 
 export default class ModuleInstance extends InstanceBase<ModuleSchema> {
@@ -89,10 +88,9 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	private reconnectTimer: NodeJS.Timeout | null = null
 	private tickTimer: NodeJS.Timeout | null = null
 	private summaryTimer: NodeJS.Timeout | null = null
+	private catalogRetryTimer: NodeJS.Timeout | null = null
 	private lastVarValues: Partial<VariablesSchema> = {}
 	private lastLimiterEngaged = false
-	/** Last warning level pushed to the flashing feedback ('' = none). */
-	private lastWarnLevel: WarnLevel = null
 	/** Whether anything was on air at the last tick; one more progress repaint follows it going quiet. */
 	private lastTickOnAir = false
 	/** Locale the presets were last published in; a change re-publishes them. */
@@ -105,7 +103,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	}
 
 	async init(config: ModuleConfig, _isFirstInit: boolean, secrets: ModuleSecrets | undefined): Promise<void> {
-		this.config = config
+		this.config = normalizeConfig(config)
 		this.secrets = { apiToken: secrets?.apiToken ?? '' }
 
 		this.updateActions()
@@ -125,8 +123,11 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	}
 
 	async configUpdated(config: ModuleConfig, secrets: ModuleSecrets | undefined): Promise<void> {
-		this.config = config
+		this.config = normalizeConfig(config)
 		this.secrets = { apiToken: secrets?.apiToken ?? '' }
+		// The per-cue name variables can be switched on or off here
+		this.lastVarValues = {}
+		this.updateVariableDefinitions()
 		this.startConnection()
 	}
 
@@ -174,7 +175,9 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
 		path: string,
 		body?: unknown,
+		signal?: AbortSignal,
 	): Promise<unknown | null> {
+		const timeout = AbortSignal.timeout(5000)
 		try {
 			const res = await fetch(`${this.baseUrl}${path}`, {
 				method,
@@ -183,7 +186,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 					...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
 				},
 				body: body !== undefined ? JSON.stringify(body) : undefined,
-				signal: AbortSignal.timeout(5000),
+				signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
 			})
 			const json: unknown = await res.json().catch(() => null)
 			if (!res.ok) {
@@ -199,13 +202,17 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			}
 			return json
 		} catch (e) {
+			// Aborted from Companion (the button's actions were cancelled): stop
+			// and throw, which Companion ignores, rather than logging a failure.
+			if (signal?.aborted) throw e
 			this.log('error', `${method} ${path} failed: ${e instanceof Error ? e.message : String(e)}`)
 			return null
 		}
 	}
 
-	async apiPost(path: string, body?: unknown): Promise<unknown | null> {
-		return this.apiRequest('POST', path, body ?? {})
+	/** POST a command. Pass the action's `context.signal` so aborting the button cancels the request. */
+	async apiPost(path: string, body?: unknown, signal?: AbortSignal): Promise<unknown | null> {
+		return this.apiRequest('POST', path, body ?? {}, signal)
 	}
 
 	/** Send a JSON command over the WebSocket. */
@@ -239,6 +246,8 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.reconnectTimer = null
 		if (this.summaryTimer) clearTimeout(this.summaryTimer)
 		this.summaryTimer = null
+		if (this.catalogRetryTimer) clearTimeout(this.catalogRetryTimer)
+		this.catalogRetryTimer = null
 		if (this.ws) {
 			this.ws.removeAllListeners()
 			// A socket still handshaking has nothing to close gracefully, and
@@ -444,12 +453,14 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	private handleCueState(msg: WsCueStateMsg): void {
 		const uuid = msg.item_uuid ?? this.state.cueToItem.get(msg.cue_id)
 		if (!uuid) return // orphan cue, not part of the project
-		this.state.cueToItem.set(msg.cue_id, uuid)
 
 		if (msg.transport === Transport.Stopped) {
+			// A stopped engine cue is finished with; a re-trigger gets a new id.
+			this.state.cueToItem.delete(msg.cue_id)
 			const existing = this.state.playing.get(uuid)
 			if (existing && existing.cueId === msg.cue_id) this.state.playing.delete(uuid)
 		} else {
+			this.state.cueToItem.set(msg.cue_id, uuid)
 			// Whatever the sequencer was waiting on has started.
 			if (this.state.advance && this.state.advance.fromUuid !== uuid) this.state.advance = null
 			const existing = this.state.playing.get(uuid)
@@ -484,11 +495,8 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			'item_paused',
 			'anything_playing',
 			'cart_active',
-			'playing_color',
-			'cart_color',
-			'item_color',
-			'cue_button',
 			...CUE_GAUGE_FEEDBACKS,
+			...CART_GAUGE_FEEDBACKS,
 		)
 		this.pushVariables()
 	}
@@ -499,15 +507,47 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	 * never polled, per the LivePlay API guidance.
 	 */
 	private async refreshCatalog(): Promise<void> {
-		const doc = this.state.hasOpenProject ? (await this.probe('/api/project')).body : null
-		const items = collectProjectItems((doc as ProjectDoc | null) ?? {})
-		if (this.state.applyCatalog(items)) {
+		let doc: ProjectDoc = {}
+		if (this.state.hasOpenProject) {
+			const res = await this.probe('/api/project')
+			if (res.body === null) {
+				// A failed fetch is not an empty project: keep the cue names,
+				// presets and index lookups we already have rather than blanking
+				// them. Timeouts and server errors are worth another try.
+				const transient = res.status === 0 || res.status >= 500
+				this.log(
+					'warn',
+					`Could not fetch the open project (${res.status ? `HTTP ${res.status}` : 'no response'}); keeping the previous cue list` +
+						(transient ? ', retrying' : ''),
+				)
+				if (transient) this.scheduleCatalogRetry()
+				return
+			}
+			doc = res.body as ProjectDoc
+		}
+		if (this.catalogRetryTimer) clearTimeout(this.catalogRetryTimer)
+		this.catalogRetryTimer = null
+		if (this.state.applyCatalog(collectProjectItems(doc))) {
 			// Item set changed: re-publish variable definitions and force a full value push
 			this.lastVarValues = {}
 			this.updateVariableDefinitions()
-			// The Trigger Cue presets are generated one per catalog item
+			// The Trigger Cue presets are generated from the catalog
 			this.updatePresets()
 		}
+	}
+
+	private scheduleCatalogRetry(): void {
+		if (this.catalogRetryTimer) return
+		const seq = this.connectSeq
+		this.catalogRetryTimer = setTimeout(() => {
+			this.catalogRetryTimer = null
+			if (seq !== this.connectSeq) return
+			void (async () => {
+				await this.refreshCatalog()
+				if (seq !== this.connectSeq) return
+				this.refreshAll()
+			})()
+		}, CATALOG_RETRY_MS)
 	}
 
 	/** Apply a summary, re-publishing anything whose shape hangs off the bus list. */
@@ -604,7 +644,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 				// Resolve straight from the catalog rather than waiting on a
 				// summary round-trip — arrow-key stepping has to feel immediate.
 				this.state.selection = this.state.refFor(typeof msg.itemUuid === 'string' ? msg.itemUuid : '')
-				this.checkFeedbacks('item_selected', 'selected_color')
+				this.checkFeedbacks('item_selected')
 				this.pushVariables()
 				break
 			case 'show_mode_changed':
@@ -706,7 +746,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			'item_is_next',
 			...BUS_FEEDBACKS,
 			...CUE_GAUGE_FEEDBACKS,
-			...COLOR_FEEDBACKS,
+			...CART_GAUGE_FEEDBACKS,
 		)
 		// The locale travels with the summary as well as by doc_patch, so a
 		// server that changed language while we were disconnected still relabels.
@@ -753,7 +793,7 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 
 	/**
 	 * Low-rate tick: forwards meter-driven values (time, progress, LUFS, limiter
-	 * GR) into Companion, and drives the end-of-cue flash.
+	 * GR) into Companion. The end-of-cue flash rides along in current_flash_rgb.
 	 */
 	private tick(): void {
 		this.pushVariables()
@@ -762,23 +802,12 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			this.checkFeedbacks('limiter_engaged')
 		}
 
-		// Repaint the playing button only while a cue is actually inside a
-		// warning window, so an idle rack isn't re-rendered four times a second
-		// for the whole show. The extra tick when the level clears puts the
-		// button back to the cue's own color.
-		const current = this.state.currentItem()
-		const level = current && !this.state.isPaused(current.itemUuid) ? warnLevel(this.state.remainingSec(current)) : null
-		if (level !== null || this.lastWarnLevel !== null) {
-			this.checkFeedbacks('playing_color')
-		}
-		this.lastWarnLevel = level
-
-		// Trigger Cue gauges read progress through a value feedback rather than
-		// a variable, so it has to be re-checked while cues move. Only the
+		// Cue and cart gauges read progress through a value feedback rather
+		// than a variable, so it has to be re-checked while cues move. Only the
 		// progress value changes between transport edges; colors, text and
 		// names are re-checked on the edges themselves.
 		const onAir = this.state.playing.size > 0
-		if (onAir || this.lastTickOnAir) this.checkFeedbacks('cue_progress')
+		if (onAir || this.lastTickOnAir) this.checkFeedbacks('cue_progress', 'cart_progress')
 		this.lastTickOnAir = onAir
 	}
 }

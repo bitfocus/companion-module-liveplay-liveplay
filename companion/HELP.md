@@ -9,11 +9,12 @@ Controls LivePlay audio playout software over its REST + WebSocket external-cont
 
 ## Configuration
 
-| Setting              | Description                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------ |
-| Server IP / hostname | The machine running the LivePlay server.                                                   |
-| Port                 | The LivePlay REST/WebSocket port. Default `4480`.                                          |
-| API token            | Only needed when LivePlay requires a login. Paste an API token (starts with `lpk1_`) here. |
+| Setting                | Description                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| Server IP / hostname   | The machine running the LivePlay server.                                                     |
+| Port                   | The LivePlay REST/WebSocket port. Default `4480`.                                            |
+| API token              | Only needed when LivePlay requires a login. Paste an API token (starts with `lpk1_`) here.   |
+| Per-cue name variables | Off by default. Adds two name variables for every cue in the open project (see _Variables_). |
 
 ### Authentication
 
@@ -93,22 +94,15 @@ Every bus picker lists the buses in the open show, plus **Master** and **Preview
 - **Item is selected** / **Item is armed as Up Next**
 - **Bus is muted** / **Bus PFL is on** / **Preview mono audition is on**
 
-**Color mirrors** (paint the button from the item's own color)
+**Values** (for layered buttons and gauges; see _Progress bars_ below)
 
-LivePlay operators read cues by color first and name second, so these take the color authored in the project and put it on the button, choosing black or white text for whatever color that turns out to be.
+LivePlay operators read cues by color first and name second, so these report the color authored in the project, with black or white text for whatever color that turns out to be. Point a button **local variable** at one and use `$(local:…)` in a gauge or text element.
 
-- **Up Next item color** — for GO buttons.
-- **Selected item color** — for the arm / play-selected buttons.
-- **Playing item color (with end-of-cue flash)** — the most recently triggered on-air cue. With the flash enabled it cross-fades to yellow / orange / red at 30 s / 10 s / 5 s remaining, blinking at 2 s / 1 s / 0.5 s to match the client. Paused cues do not flash.
-- **Cart slot color** — the loaded cue's color, dimmed while idle and full while firing.
-- **Item color by UUID** — same treatment for any specific item.
-- **Cue button** — a whole cue button from one UUID _or_ index path (variables allowed): the cue's name as text, its color dimmed while idle, and a playing / paused fill (green / orange by default).
+- **Cue progress**, **Cue color**, **Cue text color**, **Cue name** — one cue's progress (`0`–`255`), color and legible text color as numbers, and its name. They take a UUID, an index path, or a variable such as `$(local:index)`.
+- **Cue state** — `playing` while the cue sounds, `paused` while it is held, blank otherwise. Use it in an expression, e.g. a fill that turns green while the cue plays.
+- **Cart slot progress**, **Cart slot color**, **Cart slot text color**, **Cart slot name** — the same for whatever is loaded into a cart slot (1–64).
 
-Each takes a **Background when empty** color used when there is no item to draw from.
-
-**Cue values** (for gauges; see _Progress bars_ below)
-
-- **Cue progress**, **Cue color**, **Cue text color**, **Cue name** — value feedbacks that report one cue's progress (`0`–`255`), color and legible text color as numbers, and its name. They take a UUID, an index path, or a variable such as `$(local:index)`. Point a button **local variable** at one and use `$(local:…)` in a gauge.
+The Up Next, selected and now-playing items have module variables for the same purpose (`next_*`, `selected_*`, `current_*`), and `current_flash_rgb` carries the end-of-cue flash: yellow / orange / red at 30 s / 10 s / 5 s remaining, blinking at 2 s / 1 s / 0.5 s to match the client. Paused cues do not flash.
 
 ## Variables
 
@@ -139,17 +133,17 @@ Each takes a **Background when empty** color used when there is no item to draw 
 
 For the gauge variables, `<x>` is `cart_<n>` (slots 1–16), `current` (Now Playing), `next` (Up Next) or `selected`. Progress is `0` whenever the item is not on air.
 
-A pair of name variables is created for every item in the open project, so any button can show an item's name whether you address it by UUID or by position. For example `$(liveplay:item_name_at_0)` is the name of the first top-level item, `$(liveplay:item_name_at_1_11)` the name at index path `1,11`, and `$(liveplay:item_name_e8eaa079-...)` the name of that specific item wherever it moves. These update automatically when the playlist is edited. (Cart-only items get a UUID variable but no index variable.)
+With **Per-cue name variables** switched on in the connection config, a pair of name variables is created for every item in the open project, so any button can show an item's name whether you address it by UUID or by position. They are off by default because a large show makes hundreds of them; the Trigger Cue presets and the **Cue name** value feedback do not need them. For example `$(liveplay:item_name_at_0)` is the name of the first top-level item, `$(liveplay:item_name_at_1_11)` the name at index path `1,11`, and `$(liveplay:item_name_e8eaa079-...)` the name of that specific item wherever it moves. These update automatically when the playlist is edited. (Cart-only items get a UUID variable but no index variable.)
 
 ## Trigger Cue presets
 
-The **Trigger Cue** preset section lists one button per cue in the open project, grouped by top-level LivePlay group (`2,35` appears under _Group 2_). Each button fires its cue by UUID and shows the cue's live name over a progress bar (see below). The list refreshes as the playlist is edited; renaming a cue relabels buttons already on a page too.
+The **Trigger Cue** preset section lists one button per cue in the open project, grouped by top-level LivePlay group (`2,35` appears under _Group 2_). Each is the _by UUID_ button below with its `uuid` local variable already set: it fires its cue by UUID and shows the cue's live name over a progress bar (see below). The list refreshes as the playlist is edited; renaming a cue relabels buttons already on a page too.
 
 The **Manual** group has two buttons you point at a cue yourself: _by index path_ and _by UUID_. Each keeps its target in a button **local variable** (`index` or `uuid`) that both the press action and the button's cue values read. Set that one value (e.g. `2,35`) and the button fires that cue, shows its name, color and progress. An index path that points at nothing shows the path itself on the button. An index button follows whatever currently sits at that position, so it retargets when the playlist is reordered.
 
 ## Progress bars
 
-Every preset that fires or shows a cue — the cart pads, **GO**, **Now playing**, **Play selected** and every **Trigger Cue** button — is a Companion 5 layered button drawn the same way: the whole button is a gauge in the cue's own color, dimmed while the cue waits, with a full-color bar sweeping left to right as it plays, under the name. GO shows the Up Next item, so its bar stays empty until that item is itself on air. Now playing also flashes yellow / orange / red near the end of the cue, blended into the bar's color.
+Every preset that fires or shows a cue — the cart pads, **GO**, **Up Next display**, **Now playing**, **Set As Next**, **Play selected**, **Selected item display** and every **Trigger Cue** button — is a Companion 5 layered button drawn the same way: the whole button is a gauge in the cue's own color, dimmed while the cue waits, with a full-color bar sweeping left to right as it plays, under the name. GO shows the Up Next item, so its bar stays empty until that item is itself on air. Now playing also flashes yellow / orange / red near the end of the cue, blended into the bar's color.
 
 To build one yourself, add a **gauge** element (horizontal, full size) with:
 
@@ -157,7 +151,7 @@ To build one yourself, add a **gauge** element (horizontal, full size) with:
 - one **color stop** at `0`, color set as an expression to `$(liveplay:cart_<n>_color_rgb)`
 - **Track style** dimmed, amount `60`
 
-then a **text** element on top with color `$(liveplay:cart_<n>_text_rgb)`. Swap `cart_<n>` for `current`, `next` or `selected`, or use the **Cue** value feedbacks through local variables for any other cue. Use the `_color_rgb` variables for gauges, not `_color`: gauge colors must be numbers, and Companion 5.0.0 draws a `#RRGGBB` text value as black.
+then a **text** element on top with color `$(liveplay:cart_<n>_text_rgb)`. Swap `cart_<n>` for `current`, `next` or `selected`, or use the **Cue** / **Cart slot** value feedbacks through local variables for any other cue or slot. Use the `_color_rgb` variables for gauges, not `_color`: gauge colors must be numbers, and Companion 5.0.0 draws a `#RRGGBB` text value as black.
 
 A cue that is a group shows no progress: LivePlay reports playback per audio cue, not per group.
 

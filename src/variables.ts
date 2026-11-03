@@ -176,10 +176,12 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		definitions[`bus_${key}_pfl`] = { name: `Bus ${bus.name}: PFL (On/Off)` }
 	}
 
-	for (const item of self.state.catalog.values()) {
-		definitions[itemNameByUuidVariable(item.uuid)] = { name: `Item name by UUID: ${item.name}` }
-		const byIndex = itemNameByIndexVariable(item.index)
-		if (byIndex) definitions[byIndex] = { name: `Item name at index ${item.index?.join(',')}: ${item.name}` }
+	if (self.config.itemVariables) {
+		for (const item of self.state.catalog.values()) {
+			definitions[itemNameByUuidVariable(item.uuid)] = { name: `Item name by UUID: ${item.name}` }
+			const byIndex = itemNameByIndexVariable(item.index)
+			if (byIndex) definitions[byIndex] = { name: `Item name at index ${item.index?.join(',')}: ${item.name}` }
+		}
 	}
 
 	self.setVariableDefinitions(definitions)
@@ -194,10 +196,12 @@ export function CollectVariableValues(self: ModuleInstance): Partial<VariablesSc
 	const fmtIndex = (index: number[] | undefined): string => (index && index.length > 0 ? index.join(',') : '')
 
 	const itemNames: Partial<VariablesSchema> = {}
-	for (const item of state.catalog.values()) {
-		itemNames[itemNameByUuidVariable(item.uuid)] = item.name
-		const byIndex = itemNameByIndexVariable(item.index)
-		if (byIndex) itemNames[byIndex] = item.name
+	if (self.config.itemVariables) {
+		for (const item of state.catalog.values()) {
+			itemNames[itemNameByUuidVariable(item.uuid)] = item.name
+			const byIndex = itemNameByIndexVariable(item.index)
+			if (byIndex) itemNames[byIndex] = item.name
+		}
 	}
 
 	const cartValues: Partial<VariablesSchema> = {}

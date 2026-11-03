@@ -15,10 +15,6 @@ export const BLACK = combineRgb(0, 0, 0)
 /** Neutral button background used when an item has no color of its own. */
 export const NEUTRAL_BG = combineRgb(28, 28, 30)
 
-/** Cue-button fills while a cue is sounding / held paused. */
-export const PLAYING_BG = combineRgb(0, 204, 0)
-export const PAUSED_BG = combineRgb(255, 153, 0)
-
 /**
  * End-of-cue warning colors and blink periods, matched to the client's
  * ActiveCueItem warning border so a Companion button and the on-screen card
@@ -149,21 +145,4 @@ export function gaugeFill(color: string | undefined, loaded: boolean): number {
  */
 export function gaugeText(fill: number, active: boolean): number {
 	return contrastText(active ? fill : dim(fill, GAUGE_TRACK_AMOUNT / 100))
-}
-
-/**
- * The background/foreground pair for an item, from its authored color.
- * `intensity` dims the fill for idle states (the client tints inactive rows
- * rather than filling them), while the text color is always picked against
- * the color that actually ends up on the button.
- */
-export function itemStyle(
-	color: string | undefined,
-	intensity = 1,
-	fallbackBg: number = NEUTRAL_BG,
-): { bgcolor: number; color: number } {
-	const parsed = parseHexColor(color)
-	if (parsed === null) return { bgcolor: fallbackBg, color: contrastText(fallbackBg) }
-	const bgcolor = intensity >= 1 ? parsed : dim(parsed, intensity)
-	return { bgcolor, color: contrastText(bgcolor) }
 }

@@ -33,19 +33,13 @@ export function UpdatePresets(self: ModuleInstance): void {
 		steps: [{ down: [{ actionId: 'go', options: {} }], up: [] }],
 	})
 
-	presets['next_display'] = {
-		type: 'simple',
+	presets['next_display'] = gaugePreset({
 		name: `${t.upNext} display`,
-		style: {
-			text: `${t.upNext}\\n$(liveplay:next_name)`,
-			size: 'auto',
-			color: WHITE,
-			bgcolor: NEUTRAL_BG,
-			show_topbar: false,
-		},
+		keywords: ['next', 'display', 'progress', 'gauge'],
+		label: `${t.upNext}\\n${moduleVar('next_name')}`,
+		sources: moduleGaugeSources('next'),
 		steps: [],
-		feedbacks: [{ feedbackId: 'next_color', options: { idle: NEUTRAL_BG } }],
-	}
+	})
 
 	// The now-playing button shows the last-triggered cue in its own color,
 	// counting down, and flashes yellow/orange/red at 30/10/5 s exactly as the
@@ -145,33 +139,21 @@ export function UpdatePresets(self: ModuleInstance): void {
 
 	// Arming shows a preview of what will be armed — name and color — so the
 	// press is confirmable before it happens.
-	presets['arm_selected'] = {
-		type: 'simple',
+	presets['arm_selected'] = gaugePreset({
 		name: `${t.setAsNext} (selected item preview)`,
-		style: {
-			text: `${t.setAsNext}\\n$(liveplay:selected_name)`,
-			size: 'auto',
-			color: WHITE,
-			bgcolor: NEUTRAL_BG,
-			show_topbar: false,
-		},
+		keywords: ['arm', 'next', 'selected', 'progress', 'gauge'],
+		label: `${t.setAsNext}\\n${moduleVar('selected_name')}`,
+		sources: moduleGaugeSources('selected'),
 		steps: [{ down: [{ actionId: 'arm_selected', options: {} }], up: [] }],
-		feedbacks: [{ feedbackId: 'selected_color', options: { idle: NEUTRAL_BG } }],
-	}
+	})
 
-	presets['selected_display'] = {
-		type: 'simple',
+	presets['selected_display'] = gaugePreset({
 		name: 'Selected item display',
-		style: {
-			text: '$(liveplay:selected_name)',
-			size: 'auto',
-			color: WHITE,
-			bgcolor: NEUTRAL_BG,
-			show_topbar: false,
-		},
+		keywords: ['selected', 'display', 'progress', 'gauge'],
+		label: moduleVar('selected_name'),
+		sources: moduleGaugeSources('selected'),
 		steps: [],
-		feedbacks: [{ feedbackId: 'selected_color', options: { idle: NEUTRAL_BG } }],
-	}
+	})
 
 	presets['play_selected'] = gaugePreset({
 		name: t.playSelected,

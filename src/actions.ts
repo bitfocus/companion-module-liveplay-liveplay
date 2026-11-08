@@ -534,10 +534,10 @@ export function UpdateActions(self: ModuleInstance): void {
 				if (!bus) return
 				// LivePlay has no relative bus-gain command, so step from the level
 				// we last heard back. Each move is echoed as buses_patched, which
-				// keeps that cached level current between presses.
+				// keeps that cached level current between presses; the cache steps
+				// ahead of the echo only once the command has actually gone out.
 				const db = Math.max(BUS_GAIN_MIN, Math.min(BUS_GAIN_MAX, bus.gainDb + event.options.delta))
-				bus.gainDb = db
-				self.wsSend({ type: 'bus_gain', busId: bus.id, gainDb: db })
+				if (self.wsSend({ type: 'bus_gain', busId: bus.id, gainDb: db })) bus.gainDb = db
 			},
 		},
 		bus_mute: {

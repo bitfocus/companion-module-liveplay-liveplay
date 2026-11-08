@@ -70,9 +70,13 @@ interface ProbeResult {
 	body: unknown
 }
 
-/** Tidy config as it arrives: a pasted host often carries a stray space, which makes every URL invalid. */
+/**
+ * Tidy config as it arrives: a pasted host often carries a stray space, which
+ * makes every URL invalid. The saved config is passed through as stored, so a
+ * missing host is tolerated here and reported by startConnection() as unset.
+ */
 function normalizeConfig(config: ModuleConfig): ModuleConfig {
-	return { ...config, host: config.host.trim() }
+	return { ...config, host: String(config.host ?? '').trim() }
 }
 
 export default class ModuleInstance extends InstanceBase<ModuleSchema> {
@@ -89,6 +93,12 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 	private tickTimer: NodeJS.Timeout | null = null
 	private summaryTimer: NodeJS.Timeout | null = null
 	private catalogRetryTimer: NodeJS.Timeout | null = null
+	/**
+	 * Set when the project document may have changed (project_changed and the
+	 * item_* patches). The summary refresh re-reads the document only then, so
+	 * a cue starting, Up Next or a cart binding changing fetches just the summary.
+	 */
+	private catalogDirty = false
 	private lastVarValues: Partial<VariablesSchema> = {}
 	private lastLimiterEngaged = false
 	/** Whether anything was on air at the last tick; one more progress repaint follows it going quiet. */
@@ -215,13 +225,14 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		return this.apiRequest('POST', path, body ?? {}, signal)
 	}
 
-	/** Send a JSON command over the WebSocket. */
-	wsSend(message: Record<string, unknown>): void {
+	/** Send a JSON command over the WebSocket. Returns false (and logs) when not connected. */
+	wsSend(message: Record<string, unknown>): boolean {
 		if (this.ws && this.ws.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(message))
-		} else {
-			this.log('warn', `Cannot send ${String(message.type)}: not connected to LivePlay`)
+			return true
 		}
+		this.log('warn', `Cannot send ${String(message.type)}: not connected to LivePlay`)
+		return false
 	}
 
 	// ------------------------------------------------- connection lifecycle
@@ -248,6 +259,8 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 		this.summaryTimer = null
 		if (this.catalogRetryTimer) clearTimeout(this.catalogRetryTimer)
 		this.catalogRetryTimer = null
+		// connect() always re-reads the document
+		this.catalogDirty = false
 		if (this.ws) {
 			this.ws.removeAllListeners()
 			// A socket still handshaking has nothing to close gracefully, and
@@ -696,12 +709,17 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			case 'next_item_set':
 			case 'cart_slot_set':
 			case 'cart_slot_cleared':
+				// Up Next and cart bindings travel in the summary. A cart slot binds
+				// an existing item; a new cart-only item arrives as item_added.
+				this.scheduleSummaryRefresh()
+				break
 			case 'project_changed':
 			case 'item_added':
 			case 'item_updated':
 			case 'item_removed':
 			case 'items_reordered':
-				// Names / indices / cart bindings / buses may have changed — re-seed from the summary
+				// Names / indices / the item set may have changed — re-read the document too
+				this.catalogDirty = true
 				this.scheduleSummaryRefresh()
 				break
 			default:
@@ -720,9 +738,16 @@ export default class ModuleInstance extends InstanceBase<ModuleSchema> {
 			void (async () => {
 				const summary = (await this.probe('/api/state/summary')).body as StateSummary | null
 				if (seq !== this.connectSeq || !summary) return
+				const project = this.state.projectSignature()
 				this.applySummary(summary)
-				await this.refreshCatalog()
-				if (seq !== this.connectSeq) return
+				// Belt and braces: a different project (or item count) than we
+				// last saw means the document changed, patch or no patch.
+				if (this.state.projectSignature() !== project) this.catalogDirty = true
+				if (this.catalogDirty) {
+					this.catalogDirty = false
+					await this.refreshCatalog()
+					if (seq !== this.connectSeq) return
+				}
 				this.refreshAll()
 			})()
 		}, SUMMARY_DEBOUNCE_MS)

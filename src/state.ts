@@ -108,6 +108,11 @@ export class LivePlayState {
 	 */
 	private triggerSeqHigh = 0
 
+	/** The open project as the summary describes it; a change means the item catalog is stale. */
+	projectSignature(): string {
+		return `${this.hasOpenProject}\u0000${this.projectName}\u0000${this.itemCount}`
+	}
+
 	/** Next trigger stamp; always above every sequence seen so far. */
 	nextTriggerSeq(): number {
 		return ++this.triggerSeqHigh
